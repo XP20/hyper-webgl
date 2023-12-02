@@ -1,7 +1,18 @@
+use std::{rc::Rc, cell::RefCell};
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGl2RenderingContext, WebGlShader, WebGlProgram};
 extern crate js_sys;
 extern crate nalgebra_glm as glm;
+
+fn window() -> web_sys::Window {
+    web_sys::window().expect("no global `window` exists")
+}
+
+fn request_animation_frame(f: &Closure<dyn FnMut()>) {
+    window()
+        .request_animation_frame(f.as_ref().unchecked_ref())
+        .expect("should register `requestAnimationFrame` OK");
+}
 
 #[wasm_bindgen(start)]
 fn start() -> Result<(), JsValue> {
@@ -61,7 +72,27 @@ fn start() -> Result<(), JsValue> {
     context.bind_vertex_array(Some(&vao));
 
     let vertex_count = (vertices.len() / 3) as i32;
-    draw(&context, vertex_count);
+
+    // This is our render loop
+    let func = Rc::new(RefCell::new(None));
+    let gfunc = func.clone();
+
+    *gfunc.borrow_mut() = Some(Closure::wrap(Box::new(move || {
+        // if exit.is_set():
+        //   let _ = f.borrow_mut().take();
+        //   return;
+
+        let mut trans = glm::identity::<f32, 4>();
+        trans = glm::rotate(&trans, 
+            f32::to_radians(window().performance().unwrap().now() as f32), 
+            &glm::vec3(0.0, 0.0, 1.0)
+        );
+
+        draw(&context, vertex_count);
+        
+        request_animation_frame(func.borrow().as_ref().unwrap());
+    }) as Box<dyn FnMut()>));
+    request_animation_frame(gfunc.borrow().as_ref().unwrap());
 
     Ok(())
 }
