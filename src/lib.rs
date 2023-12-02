@@ -1,142 +1,124 @@
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use web_sys::{WebGlRenderingContext, WebGlShader, WebGlProgram};
+use web_sys::{WebGl2RenderingContext, WebGlShader, WebGlProgram};
 extern crate js_sys;
+extern crate nalgebra_glm as glm;
 
-pub fn init_webgl_context(canvas_id: &str) -> Result<WebGlRenderingContext, JsValue> {
+#[wasm_bindgen(start)]
+fn start() -> Result<(), JsValue> {
     let document = web_sys::window().unwrap().document().unwrap();
-    let canvas = document.get_element_by_id(canvas_id).unwrap();
+    let canvas = document.get_element_by_id("canvas").unwrap();
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
-    let gl: WebGlRenderingContext = canvas
-        .get_context("webgl")?
+
+    let context: WebGl2RenderingContext = canvas
+        .get_context("webgl2")?
         .unwrap()
-        .dyn_into::<WebGlRenderingContext>()
-        .unwrap();
+        .dyn_into::<WebGl2RenderingContext>()?;
 
-    gl.viewport(
+    let vertex_shader = compile_shader(
+        &context,
+        WebGl2RenderingContext::VERTEX_SHADER,
+        include_str!("./shaders/vertex.glsl")
+    )?;
+    let fragment_shader = compile_shader(
+        &context,
+        WebGl2RenderingContext::FRAGMENT_SHADER,
+        include_str!("./shaders/fragment.glsl")
+    )?;
+    let program = link_program(&context, &vertex_shader, &fragment_shader)?;
+    context.use_program(Some(&program));
+
+    let vertices: [f32; 9] = [-0.7, -0.7, 0.0, 0.7, -0.7, 0.0, 0.0, 0.7, 0.0];    
+
+    let position_attribute_location = context.get_attrib_location(&program, "position");
+    let buffer = context.create_buffer().ok_or("Failed to create buffer")?;
+    context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
+
+    unsafe {
+        let positions_array_buf_view = js_sys::Float32Array::view(&vertices);
+
+        context.buffer_data_with_array_buffer_view(
+            WebGl2RenderingContext::ARRAY_BUFFER,
+            &positions_array_buf_view,
+            WebGl2RenderingContext::STATIC_DRAW,
+        );
+    }
+
+    let vao = context
+        .create_vertex_array()
+        .ok_or("Could not create vertex array object")?;
+    context.bind_vertex_array(Some(&vao));
+
+    context.vertex_attrib_pointer_with_i32(
+        position_attribute_location as u32,
+        3,
+        WebGl2RenderingContext::FLOAT,
+        false,
         0,
         0,
-        canvas.width().try_into().unwrap(),
-        canvas.height().try_into().unwrap(),
     );
+    context.enable_vertex_attrib_array(position_attribute_location as u32);
 
-    Ok(gl)
+    context.bind_vertex_array(Some(&vao));
+
+    let vertex_count = (vertices.len() / 3) as i32;
+    draw(&context, vertex_count);
+
+    Ok(())
 }
 
-pub fn create_shader(
-    gl: &WebGlRenderingContext,
+pub fn compile_shader(
+    context: &WebGl2RenderingContext,
     shader_type: u32,
     source: &str,
-) -> Result<WebGlShader, JsValue> {
-    let shader = gl
+) -> Result<WebGlShader, String> {
+    let shader = context
         .create_shader(shader_type)
-        .ok_or_else(|| JsValue::from_str("Unable to create shader object"))?;
+        .ok_or_else(|| String::from("Unable to create shader object"))?;
+    context.shader_source(&shader, source);
+    context.compile_shader(&shader);
 
-    gl.shader_source(&shader, source);
-    gl.compile_shader(&shader);
-
-    if gl
-        .get_shader_parameter(&shader, WebGlRenderingContext::COMPILE_STATUS)
+    if context
+        .get_shader_parameter(&shader, WebGl2RenderingContext::COMPILE_STATUS)
         .as_bool()
         .unwrap_or(false)
     {
         Ok(shader)
     } else {
-        Err(JsValue::from_str(
-            &gl.get_shader_info_log(&shader)
-                .unwrap_or_else(|| "Unknown error creating shader".into()),
-        ))
+        Err(context
+            .get_shader_info_log(&shader)
+            .unwrap_or_else(|| String::from("Unknown error creating shader"))
+        )
     }
 }
 
-pub fn setup_shaders(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValue> {
-    let vertex_shader_source = include_str!("./shaders/vertex.glsl");
-    let fragment_shader_source = include_str!("./shaders/fragment.glsl");
+pub fn link_program(
+    context: &WebGl2RenderingContext,
+    vert_shader: &WebGlShader,
+    frag_shader: &WebGlShader,
+) -> Result<WebGlProgram, String> {
+    let program = context
+        .create_program()
+        .ok_or_else(|| String::from("Unable to create shader object"))?;
 
-    let vertex_shader = create_shader(
-        &gl,
-        WebGlRenderingContext::VERTEX_SHADER,
-        vertex_shader_source,
-    )
-    .unwrap();
-    let fragment_shader = create_shader(
-        &gl,
-        WebGlRenderingContext::FRAGMENT_SHADER,
-        fragment_shader_source,
-    )
-    .unwrap();
+    context.attach_shader(&program, vert_shader);
+    context.attach_shader(&program, frag_shader);
+    context.link_program(&program);
 
-    let shader_program = gl.create_program().unwrap();
-    gl.attach_shader(&shader_program, &vertex_shader);
-    gl.attach_shader(&shader_program, &fragment_shader);
-    gl.link_program(&shader_program);
-
-    if gl
-        .get_program_parameter(&shader_program, WebGlRenderingContext::LINK_STATUS)
+    if context.get_program_parameter(&program, WebGl2RenderingContext::LINK_STATUS)
         .as_bool()
         .unwrap_or(false)
     {
-        gl.use_program(Some(&shader_program));
-        Ok(shader_program)
+        Ok(program)
     } else {
-        return Err(JsValue::from_str(
-            &gl.get_program_info_log(&shader_program)
-                .unwrap_or_else(|| "Unknown error linking program".into()),
-        ));
+        Err(context
+            .get_program_info_log(&program)
+            .unwrap_or_else(|| String::from("Unknown error creating program object")))
     }
 }
 
-pub fn setup_vertices(gl: &WebGlRenderingContext, vertices: &[f32], shader_program: &WebGlProgram) {
-    let vertices_array = unsafe { js_sys::Float32Array::view(&vertices) };
-    let vertex_buffer = gl.create_buffer().unwrap();
+fn draw(context: &WebGl2RenderingContext, vertex_count: i32) {
+    context.clear_color(0.0, 0.0, 0.0, 1.0);
+    context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
 
-    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_buffer));
-    gl.buffer_data_with_array_buffer_view(
-        WebGlRenderingContext::ARRAY_BUFFER,
-        &vertices_array,
-        WebGlRenderingContext::STATIC_DRAW,
-    );
-
-    let coordinates_location = gl.get_attrib_location(&shader_program, "coordinates");
-
-    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_buffer));
-    gl.vertex_attrib_pointer_with_i32(
-        coordinates_location as u32,
-        3,
-        WebGlRenderingContext::FLOAT,
-        false,
-        0,
-        0,
-    );
-    gl.enable_vertex_attrib_array(coordinates_location as u32);
-}
-
-#[wasm_bindgen]
-pub fn draw_triangle(
-    canvas_id: &str,
-    selected_color: Option<Vec<f32>>,
-) -> Result<WebGlRenderingContext, JsValue> {
-    let gl: WebGlRenderingContext = init_webgl_context(canvas_id).unwrap();
-    let shader_program: WebGlProgram = setup_shaders(&gl).unwrap();
-    let vertices: [f32; 9] = [
-        0.0, 1.0, 0.0, // top
-        -1.0, -1.0, 0.0, // bottom left
-        1.0, -1.0, 0.0, // bottom right
-    ];
-
-    setup_vertices(&gl, &vertices, &shader_program);
-
-    let color = selected_color.unwrap_or(vec![1.0, 0.0, 0.0, 1.0]);
-    let color_location = gl
-        .get_uniform_location(&shader_program, "fragColor")
-        .unwrap();
-    gl.uniform4fv_with_f32_array(Some(&color_location), &color);
-
-    gl.draw_arrays(
-        WebGlRenderingContext::TRIANGLES,
-        0,
-        (vertices.len() / 3) as i32,
-    );
-
-    Ok(gl)
+    context.draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, vertex_count);
 }
