@@ -31,14 +31,7 @@ const config = {
         rules: [
             {
                 test: /\.(ts|tsx)$/i,
-                use: {
-                    loader: 'ts-loader',
-                    // options: {
-                    //     compilerOptions: {
-                    //         noEmit: false,
-                    //     },
-                    // },
-                },
+                loader: 'ts-loader',
                 exclude: ['/node_modules/'],
             },
             {
