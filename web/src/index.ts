@@ -7,13 +7,20 @@ if (canvas) {
   canvas.height = window.innerHeight;
 }
 
+const def_color = new Float32Array([1.0, 0.0, 0.0, 1.0]);
 async function run() {
   // await init();
-  const color = new Float32Array([1.0, 0.0, 0.0, 1.0]);
-  draw_triangle(CANVAS_ID, color);
+  draw_triangle(CANVAS_ID, def_color);
 }
 
 run();
+
+const onResize = (event: Event) => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  draw_triangle(CANVAS_ID, def_color);
+}
+window.addEventListener("resize", onResize);
 
 setInterval(() => {
   const color = new Float32Array([

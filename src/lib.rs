@@ -50,20 +50,8 @@ pub fn create_shader(
 }
 
 pub fn setup_shaders(gl: &WebGlRenderingContext) -> Result<WebGlProgram, JsValue> {
-    let vertex_shader_source = "
-        attribute vec3 coordinates;
-        void main(void) {
-            gl_Position = vec4(coordinates, 1.0);
-        }
-        ";
-
-    let fragment_shader_source = "
-        precision mediump float;
-        uniform vec4 fragColor;
-        void main(void) {
-            gl_FragColor = fragColor;
-        }
-        ";
+    let vertex_shader_source = include_str!("./shaders/vertex.glsl");
+    let fragment_shader_source = include_str!("./shaders/fragment.glsl");
 
     let vertex_shader = create_shader(
         &gl,
