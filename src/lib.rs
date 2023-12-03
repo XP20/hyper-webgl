@@ -84,9 +84,13 @@ fn start() -> Result<(), JsValue> {
 
         let mut trans = glm::identity::<f32, 4>();
         trans = glm::rotate(&trans, 
-            f32::to_radians(window().performance().unwrap().now() as f32), 
+            f32::to_radians((window().performance().unwrap().now()/100.0) as f32), 
+            // f32::to_radians(90.0),
             &glm::vec3(0.0, 0.0, 1.0)
         );
+
+        let trans_location = context.get_uniform_location(&program, "transform").unwrap();
+        context.uniform_matrix4fv_with_f32_array(Some(&trans_location), false, trans.as_slice());
 
         draw(&context, vertex_count);
         
