@@ -4,8 +4,15 @@ use web_sys::{WebGl2RenderingContext, WebGlShader, WebGlProgram, HtmlCanvasEleme
 extern crate js_sys;
 extern crate nalgebra_glm as glm;
 
+mod obj_parse;
+use obj_parse::obj::parse;
+
 fn window() -> web_sys::Window {
     web_sys::window().expect("no global `window` exists")
+}
+
+fn document() -> web_sys::Document {
+    window().document().unwrap()
 }
 
 fn request_animation_frame(f: &Closure<dyn FnMut()>) {
@@ -28,14 +35,15 @@ fn get_window_dimmensions() -> (i32, i32) {
 }
 
 fn resize_callback(context_ref: WebGl2RenderingContext, canvas_ref: HtmlCanvasElement) {
-    let (width, height) = get_window_dimmensions();    canvas_ref.set_width(width as u32);
+    let (width, height) = get_window_dimmensions();
+    canvas_ref.set_width(width as u32);
     canvas_ref.set_height(height as u32);
     context_ref.viewport(0, 0, width, height);
 }
 
 #[wasm_bindgen(start)]
 fn start() -> Result<(), JsValue> {
-    let document = web_sys::window().unwrap().document().unwrap();
+    let document = document();
     let canvas = document.get_element_by_id("canvas").unwrap();
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
 
@@ -54,13 +62,20 @@ fn start() -> Result<(), JsValue> {
     let program = link_program(&context, &vertex_shader, &fragment_shader)?;
     context.use_program(Some(&program));
 
-    // let vertices: [f32; 9] = [-0.7, -0.7, 0.0, 0.7, -0.7, 0.0, 0.0, 0.7, 0.0];    
-    let vertices: [f32; 18] = [-0.7, 0.7, 0.0, -0.7, -0.7, 0.0, 0.7, -0.7, 0.0,
-                               0.7, -0.7, 0.0, 0.7, 0.7, 0.0, -0.7, 0.7, 0.0];    
+    let vertices: [f32; 12] = [
+        0.7, 0.7, 0.0,   // top right
+        0.7, -0.7, 0.0,  // bottom right
+        -0.7, -0.7, 0.0, // bottom left
+        -0.7, 0.7, 0.0   // top left
+    ];
+    let indices: [u16; 6] = [
+        0, 3, 1,
+        2, 1, 3
+    ];
 
     let position_attribute_location = context.get_attrib_location(&program, "position");
-    let buffer = context.create_buffer().ok_or("Failed to create buffer")?;
-    context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
+    let vbo = context.create_buffer().ok_or("Failed to create buffer")?;
+    context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vbo));
 
     unsafe {
         let positions_array_buf_view = js_sys::Float32Array::view(&vertices);
@@ -71,6 +86,21 @@ fn start() -> Result<(), JsValue> {
             WebGl2RenderingContext::STATIC_DRAW,
         );
     }
+    // context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, None);
+
+    let ebo = context.create_buffer().ok_or("Failed to create buffer")?;
+    context.bind_buffer(WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, Some(&ebo));
+
+    unsafe {
+        let indices_array_buf_view = js_sys::Uint16Array::view(&indices);
+
+        context.buffer_data_with_array_buffer_view(
+            WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
+            &indices_array_buf_view,
+            WebGl2RenderingContext::STATIC_DRAW
+        );
+    }
+    // context.bind_buffer(WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, None);
 
     let vao = context
         .create_vertex_array()
@@ -88,8 +118,7 @@ fn start() -> Result<(), JsValue> {
     context.enable_vertex_attrib_array(position_attribute_location as u32);
 
     context.bind_vertex_array(Some(&vao));
-
-    let vertex_count = (vertices.len() / 3) as i32;
+    context.bind_buffer(WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, Some(&ebo));
 
     // Window resize callback
     let resize_func = Closure::wrap(Box::new({
@@ -137,7 +166,7 @@ fn start() -> Result<(), JsValue> {
             context_ref.uniform_matrix4fv_with_f32_array(Some(&view_location), false, view.as_slice());
             context_ref.uniform_matrix4fv_with_f32_array(Some(&proj_location), false, projection.as_slice());
 
-            draw(&context_ref, vertex_count);
+            draw(&context_ref, indices.len() as i32);
             
             request_animation_frame(render_func.borrow().as_ref().unwrap());
         }
@@ -145,6 +174,20 @@ fn start() -> Result<(), JsValue> {
     request_animation_frame(ref_render_func.borrow().as_ref().unwrap());
 
     Ok(())
+}
+
+fn draw(context: &WebGl2RenderingContext, indices_count: i32) {
+    context.clear_color(0.0, 0.0, 0.0, 1.0);
+    context.enable(WebGl2RenderingContext::DEPTH_TEST);
+    context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
+
+    context.draw_elements_with_i32(
+        WebGl2RenderingContext::TRIANGLES,
+        indices_count,
+        WebGl2RenderingContext::UNSIGNED_SHORT,
+        0
+    );
+    // context.draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, vertex_count);
 }
 
 pub fn compile_shader(
@@ -195,11 +238,4 @@ pub fn link_program(
             .get_program_info_log(&program)
             .unwrap_or_else(|| String::from("Unknown error creating program object")))
     }
-}
-
-fn draw(context: &WebGl2RenderingContext, vertex_count: i32) {
-    context.clear_color(0.0, 0.0, 0.0, 1.0);
-    context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
-
-    context.draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, vertex_count);
 }
