@@ -22,12 +22,13 @@ fn context(canvas: HtmlCanvasElement) -> WebGl2RenderingContext {
         .expect("failed dyn_into WebGl2RenderingContext")
 }
 
+fn get_window_dimmensions() -> (i32, i32) {
+    (window().inner_width().unwrap().as_f64().unwrap() as i32,
+    window().inner_height().unwrap().as_f64().unwrap() as i32)
+}
+
 fn resize_callback(context_ref: WebGl2RenderingContext, canvas_ref: HtmlCanvasElement) {
-    let (width, height) = (
-        window().inner_width().unwrap().as_f64().unwrap() as i32, 
-        window().inner_height().unwrap().as_f64().unwrap() as i32
-    );
-    canvas_ref.set_width(width as u32);
+    let (width, height) = get_window_dimmensions();    canvas_ref.set_width(width as u32);
     canvas_ref.set_height(height as u32);
     context_ref.viewport(0, 0, width, height);
 }
@@ -53,7 +54,9 @@ fn start() -> Result<(), JsValue> {
     let program = link_program(&context, &vertex_shader, &fragment_shader)?;
     context.use_program(Some(&program));
 
-    let vertices: [f32; 9] = [-0.7, -0.7, 0.0, 0.7, -0.7, 0.0, 0.0, 0.7, 0.0];    
+    // let vertices: [f32; 9] = [-0.7, -0.7, 0.0, 0.7, -0.7, 0.0, 0.0, 0.7, 0.0];    
+    let vertices: [f32; 18] = [-0.7, 0.7, 0.0, -0.7, -0.7, 0.0, 0.7, -0.7, 0.0,
+                               0.7, -0.7, 0.0, 0.7, 0.7, 0.0, -0.7, 0.7, 0.0];    
 
     let position_attribute_location = context.get_attrib_location(&program, "position");
     let buffer = context.create_buffer().ok_or("Failed to create buffer")?;
@@ -107,15 +110,32 @@ fn start() -> Result<(), JsValue> {
     *ref_render_func.borrow_mut() = Some(Closure::wrap(Box::new({
         let context_ref = context.clone();
         move || {
-            let context_ref = context_ref.clone();
-            let mut trans = glm::identity::<f32, 4>();
-            trans = glm::rotate(&trans, 
-                f32::to_radians(window().performance().unwrap().now() as f32), 
-                &glm::vec3(0.0, 0.0, 1.0)
+            let time = window().performance().unwrap().now() as f32;
+
+            let mut model = glm::identity::<f32, 4>();
+            model = glm::rotate(&model, 
+                f32::to_radians(time / 10.0), 
+                &glm::vec3(1.0, 0.0, 0.0)
+            );
+            model = glm::rotate(&model, 
+                f32::to_radians(time / 10.0 + 90.0), 
+                &glm::vec3(0.0, 1.0, 0.0)
             );
 
-            let trans_location = context_ref.get_uniform_location(&program, "transform").unwrap();
-            context_ref.uniform_matrix4fv_with_f32_array(Some(&trans_location), false, trans.as_slice());
+            let mut view = glm::identity::<f32, 4>();
+            view = glm::translate(&view, &glm::vec3(0.0, 0.0, -3.0));
+
+            let (width, height) = get_window_dimmensions();
+            let aspect = width as f32 / height as f32;
+            let projection;
+            projection = glm::perspective(aspect, f32::to_radians(45.0), 0.1, 100.0);
+
+            let model_location = context_ref.get_uniform_location(&program, "model").unwrap();
+            let view_location = context_ref.get_uniform_location(&program, "view").unwrap();
+            let proj_location = context_ref.get_uniform_location(&program, "projection").unwrap();
+            context_ref.uniform_matrix4fv_with_f32_array(Some(&model_location), false, model.as_slice());
+            context_ref.uniform_matrix4fv_with_f32_array(Some(&view_location), false, view.as_slice());
+            context_ref.uniform_matrix4fv_with_f32_array(Some(&proj_location), false, projection.as_slice());
 
             draw(&context_ref, vertex_count);
             
