@@ -1,6 +1,6 @@
 use std::{rc::Rc, cell::RefCell};
 use wasm_bindgen::prelude::*;
-use web_sys::{WebGl2RenderingContext, WebGlShader, WebGlProgram};
+use web_sys::{WebGl2RenderingContext, WebGlShader, WebGlProgram, HtmlCanvasElement};
 extern crate js_sys;
 extern crate nalgebra_glm as glm;
 
@@ -14,16 +14,31 @@ fn request_animation_frame(f: &Closure<dyn FnMut()>) {
         .expect("should register `requestAnimationFrame` OK");
 }
 
+fn context(canvas: HtmlCanvasElement) -> WebGl2RenderingContext {
+    canvas.get_context("webgl2")
+        .expect("no context named `webgl2` found for canvas")
+        .unwrap()
+        .dyn_into::<WebGl2RenderingContext>()
+        .expect("failed dyn_into WebGl2RenderingContext")
+}
+
+fn resize_callback(context_ref: WebGl2RenderingContext, canvas_ref: HtmlCanvasElement) {
+    let (width, height) = (
+        window().inner_width().unwrap().as_f64().unwrap() as i32, 
+        window().inner_height().unwrap().as_f64().unwrap() as i32
+    );
+    canvas_ref.set_width(width as u32);
+    canvas_ref.set_height(height as u32);
+    context_ref.viewport(0, 0, width, height);
+}
+
 #[wasm_bindgen(start)]
 fn start() -> Result<(), JsValue> {
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document.get_element_by_id("canvas").unwrap();
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
 
-    let context: WebGl2RenderingContext = canvas
-        .get_context("webgl2")?
-        .unwrap()
-        .dyn_into::<WebGl2RenderingContext>()?;
+    let context = context(canvas.clone());
 
     let vertex_shader = compile_shader(
         &context,
@@ -73,30 +88,41 @@ fn start() -> Result<(), JsValue> {
 
     let vertex_count = (vertices.len() / 3) as i32;
 
+    // Window resize callback
+    let resize_func = Closure::wrap(Box::new({
+        let context_ref = context.clone();
+        let canvas_ref = canvas.clone();
+        move || {
+            resize_callback(context_ref.clone(), canvas_ref.clone());
+        }
+    }) as Box<dyn FnMut()>);
+    window().add_event_listener_with_callback("resize", resize_func.as_ref().unchecked_ref())?;
+    resize_callback(context.clone(), canvas.clone());
+    resize_func.forget();
+
     // This is our render loop
-    let func = Rc::new(RefCell::new(None));
-    let gfunc = func.clone();
+    let render_func = Rc::new(RefCell::new(None));
+    let ref_render_func = render_func.clone();
 
-    *gfunc.borrow_mut() = Some(Closure::wrap(Box::new(move || {
-        // if exit.is_set():
-        //   let _ = f.borrow_mut().take();
-        //   return;
+    *ref_render_func.borrow_mut() = Some(Closure::wrap(Box::new({
+        let context_ref = context.clone();
+        move || {
+            let context_ref = context_ref.clone();
+            let mut trans = glm::identity::<f32, 4>();
+            trans = glm::rotate(&trans, 
+                f32::to_radians(window().performance().unwrap().now() as f32), 
+                &glm::vec3(0.0, 0.0, 1.0)
+            );
 
-        let mut trans = glm::identity::<f32, 4>();
-        trans = glm::rotate(&trans, 
-            f32::to_radians((window().performance().unwrap().now()/100.0) as f32), 
-            // f32::to_radians(90.0),
-            &glm::vec3(0.0, 0.0, 1.0)
-        );
+            let trans_location = context_ref.get_uniform_location(&program, "transform").unwrap();
+            context_ref.uniform_matrix4fv_with_f32_array(Some(&trans_location), false, trans.as_slice());
 
-        let trans_location = context.get_uniform_location(&program, "transform").unwrap();
-        context.uniform_matrix4fv_with_f32_array(Some(&trans_location), false, trans.as_slice());
-
-        draw(&context, vertex_count);
-        
-        request_animation_frame(func.borrow().as_ref().unwrap());
+            draw(&context_ref, vertex_count);
+            
+            request_animation_frame(render_func.borrow().as_ref().unwrap());
+        }
     }) as Box<dyn FnMut()>));
-    request_animation_frame(gfunc.borrow().as_ref().unwrap());
+    request_animation_frame(ref_render_func.borrow().as_ref().unwrap());
 
     Ok(())
 }

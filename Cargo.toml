@@ -17,9 +17,10 @@ version = "0.3.66"
 features = [
   'Document', 
   'Window', 
-  'Element',
   'Performance',
+  'Element',
   'HtmlCanvasElement' ,
+  'EventTarget',
   'WebGlVertexArrayObject',
   'WebGlRenderingContext', 
   'WebGl2RenderingContext', 
