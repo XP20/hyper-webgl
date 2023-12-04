@@ -164,7 +164,7 @@ fn start() -> Result<(), JsValue> {
             //     &glm::vec3(1.0, 0.0, 0.0)
             // );
             model = glm::scale(&model, &glm::vec3(0.3, 0.3, 0.3));
-            model = glm::translate(&model, &glm::vec3(0.0, -2.0, 0.0));
+            model = glm::translate(&model, &glm::vec3(0.0, -4.0, -2.0));
             model = glm::rotate(&model, 
                 f32::to_radians(time / 10.0 + 90.0), 
                 &glm::vec3(0.0, 1.0, 0.0)
