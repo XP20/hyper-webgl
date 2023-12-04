@@ -71,6 +71,13 @@ const func = () => {
         asyncWebAssembly: true,
         syncWebAssembly: true,
     };
+
+    config.resolve = {
+        fallback: {
+            "fs": false
+        },
+    };
+
     return config;
 };
 
