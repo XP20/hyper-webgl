@@ -7,6 +7,18 @@ extern crate nalgebra_glm as glm;
 mod obj_parse;
 use obj_parse::obj::parse;
 
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+}
+
+#[wasm_bindgen(module = "/web/src/lib.ts")]
+extern "C" {
+    #[wasm_bindgen(catch)]
+    fn read_file(path: &str) -> Result<String, JsValue>;
+}
+
 fn window() -> web_sys::Window {
     web_sys::window().expect("no global `window` exists")
 }
@@ -62,16 +74,20 @@ fn start() -> Result<(), JsValue> {
     let program = link_program(&context, &vertex_shader, &fragment_shader)?;
     context.use_program(Some(&program));
 
-    let vertices: [f32; 12] = [
-        0.7, 0.7, 0.0,   // top right
-        0.7, -0.7, 0.0,  // bottom right
-        -0.7, -0.7, 0.0, // bottom left
-        -0.7, 0.7, 0.0   // top left
-    ];
-    let indices: [u16; 6] = [
-        0, 3, 1,
-        2, 1, 3
-    ];
+    // let vertices: [f32; 12] = [
+    //     0.7, 0.7, 0.0,   // top right
+    //     0.7, -0.7, 0.0,  // bottom right
+    //     -0.7, -0.7, 0.0, // bottom left
+    //     -0.7, 0.7, 0.0   // top left
+    // ];
+    // let indices: [u16; 6] = [
+    //     0, 3, 1,
+    //     2, 1, 3
+    // ];
+    let obj_data = read_file("dragon.obj").unwrap();
+    let (verts_vec, indices_vec) = parse(&obj_data);
+    let vertices = verts_vec.as_slice();
+    let indices = indices_vec.as_slice();
 
     let position_attribute_location = context.get_attrib_location(&program, "position");
     let vbo = context.create_buffer().ok_or("Failed to create buffer")?;
@@ -138,14 +154,17 @@ fn start() -> Result<(), JsValue> {
 
     *ref_render_func.borrow_mut() = Some(Closure::wrap(Box::new({
         let context_ref = context.clone();
+        let indices_len = indices.len() as i32;
         move || {
             let time = window().performance().unwrap().now() as f32;
 
             let mut model = glm::identity::<f32, 4>();
-            model = glm::rotate(&model, 
-                f32::to_radians(time / 10.0), 
-                &glm::vec3(1.0, 0.0, 0.0)
-            );
+            // model = glm::rotate(&model, 
+            //     f32::to_radians(time / 10.0), 
+            //     &glm::vec3(1.0, 0.0, 0.0)
+            // );
+            model = glm::scale(&model, &glm::vec3(0.3, 0.3, 0.3));
+            model = glm::translate(&model, &glm::vec3(0.0, -2.0, 0.0));
             model = glm::rotate(&model, 
                 f32::to_radians(time / 10.0 + 90.0), 
                 &glm::vec3(0.0, 1.0, 0.0)
@@ -166,7 +185,7 @@ fn start() -> Result<(), JsValue> {
             context_ref.uniform_matrix4fv_with_f32_array(Some(&view_location), false, view.as_slice());
             context_ref.uniform_matrix4fv_with_f32_array(Some(&proj_location), false, projection.as_slice());
 
-            draw(&context_ref, indices.len() as i32);
+            draw(&context_ref, indices_len);
             
             request_animation_frame(render_func.borrow().as_ref().unwrap());
         }
