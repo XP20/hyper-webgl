@@ -1,4 +1,4 @@
-use std::{rc::Rc, cell::RefCell};
+use std::{rc::Rc, cell::RefCell, mem::size_of};
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGl2RenderingContext, WebGlShader, WebGlProgram, HtmlCanvasElement};
 extern crate js_sys;
@@ -74,22 +74,15 @@ fn start() -> Result<(), JsValue> {
     let program = link_program(&context, &vertex_shader, &fragment_shader)?;
     context.use_program(Some(&program));
 
-    // let vertices: [f32; 12] = [
-    //     0.7, 0.7, 0.0,   // top right
-    //     0.7, -0.7, 0.0,  // bottom right
-    //     -0.7, -0.7, 0.0, // bottom left
-    //     -0.7, 0.7, 0.0   // top left
-    // ];
-    // let indices: [u16; 6] = [
-    //     0, 3, 1,
-    //     2, 1, 3
-    // ];
     let obj_data = read_file("dragon.obj").unwrap();
     let (verts_vec, indices_vec) = parse(&obj_data);
     let vertices = verts_vec.as_slice();
     let indices = indices_vec.as_slice();
 
     let position_attribute_location = context.get_attrib_location(&program, "position");
+    let texcoord_attribute_location = context.get_attrib_location(&program, "texcoord");
+    let normal_attribute_location = context.get_attrib_location(&program, "normal");
+    
     let vbo = context.create_buffer().ok_or("Failed to create buffer")?;
     context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vbo));
 
@@ -102,7 +95,6 @@ fn start() -> Result<(), JsValue> {
             WebGl2RenderingContext::STATIC_DRAW,
         );
     }
-    // context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, None);
 
     let ebo = context.create_buffer().ok_or("Failed to create buffer")?;
     context.bind_buffer(WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, Some(&ebo));
@@ -116,7 +108,6 @@ fn start() -> Result<(), JsValue> {
             WebGl2RenderingContext::STATIC_DRAW
         );
     }
-    // context.bind_buffer(WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, None);
 
     let vao = context
         .create_vertex_array()
@@ -128,10 +119,28 @@ fn start() -> Result<(), JsValue> {
         3,
         WebGl2RenderingContext::FLOAT,
         false,
-        0,
+        8 * size_of::<f32>() as i32,
         0,
     );
+    context.vertex_attrib_pointer_with_i32(
+        texcoord_attribute_location as u32,
+        2,
+        WebGl2RenderingContext::FLOAT,
+        false,
+        8 * size_of::<f32>() as i32,
+        3 * size_of::<f32>() as i32,
+    );
+    context.vertex_attrib_pointer_with_i32(
+        normal_attribute_location as u32,
+        3,
+        WebGl2RenderingContext::FLOAT,
+        false,
+        8 * size_of::<f32>() as i32,
+        5 * size_of::<f32>() as i32,
+    );
     context.enable_vertex_attrib_array(position_attribute_location as u32);
+    context.enable_vertex_attrib_array(texcoord_attribute_location as u32);
+    context.enable_vertex_attrib_array(normal_attribute_location as u32);
 
     context.bind_vertex_array(Some(&vao));
     context.bind_buffer(WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, Some(&ebo));
@@ -159,10 +168,6 @@ fn start() -> Result<(), JsValue> {
             let time = window().performance().unwrap().now() as f32;
 
             let mut model = glm::identity::<f32, 4>();
-            // model = glm::rotate(&model, 
-            //     f32::to_radians(time / 10.0), 
-            //     &glm::vec3(1.0, 0.0, 0.0)
-            // );
             model = glm::scale(&model, &glm::vec3(0.3, 0.3, 0.3));
             model = glm::translate(&model, &glm::vec3(0.0, -4.0, -2.0));
             model = glm::rotate(&model, 

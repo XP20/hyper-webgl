@@ -3,12 +3,16 @@ pub mod obj {
         let mut verts: Vec<Vec<f32>> = Vec::new();
         let mut indices: Vec<u16> = Vec::new();
 
+        let mut positions: Vec<Vec<f32>> = Vec::new();
         let mut normals: Vec<Vec<f32>> = Vec::new();
         let mut texcoords: Vec<Vec<f32>> = Vec::new();
 
+        let mut faces = 0;
+        let mut triangles = 0;
+
         let lines = content.lines();
         for line in lines {
-            let mut iter = line.split_whitespace();
+            let mut iter = line.trim().split_whitespace();
             let Some(identifier) = iter.next() else {
                 continue;
             };
@@ -18,13 +22,14 @@ pub mod obj {
                     let y = iter.next().unwrap().parse::<f32>().unwrap();
                     let z = iter.next().unwrap().parse::<f32>().unwrap();
                     // let w = iter.next().unwrap_or("1.0").parse::<f32>().unwrap();
-                    verts.push(vec![x, y, z]);
+                    positions.push(vec![x, y, z]);
                 },
                 "vn" => {
                     let i = iter.next().unwrap().parse::<f32>().unwrap();
                     let j = iter.next().unwrap().parse::<f32>().unwrap();
                     let k = iter.next().unwrap().parse::<f32>().unwrap();
                     normals.push(vec![i, j, k]);
+                    println!("Adding normal");
                 },
                 "vt" => {
                     let u = iter.next().unwrap().parse::<f32>().unwrap();
@@ -33,26 +38,56 @@ pub mod obj {
                     texcoords.push(vec![u, v]);
                 },
                 "f" => {
-                    let (Some(x), Some(y), Some(z)) = (iter.next(), iter.next(), iter.next()) else {
-                        panic!("Invalid .obj face format");
-                    };
-                    // Handle 3 or 4 args
-                    // Handle with vt and vn or without
-                    // Handle with vt and without
-                    let x = iter.next().unwrap().split('/').next().unwrap().parse::<u16>().unwrap() - 1;
-                    let y = iter.next().unwrap().split('/').next().unwrap().parse::<u16>().unwrap() - 1;
-                    let z = iter.next().unwrap().split('/').next().unwrap().parse::<u16>().unwrap() - 1;
-                    if let Some(item) = iter.next() {
-                        let w = item.split('/').next().unwrap().parse::<u16>().unwrap() - 1;
-                        indices.extend_from_slice(&[x, y, z, x, z, w]);
+                    let specs = iter.collect::<Vec<&str>>().clone();
+                    if specs.len() >= 3 {
+                        let mut i = 0;
+                        let mut v0 = 0;
+                        while i < specs.len() {
+                            let spec = specs[i];
+                            let [v, vt, vn] = spec.split("/")
+                                .map(|x| x.parse::<u16>().unwrap_or(0))
+                                .collect::<Vec<u16>>()[..]
+                            else {
+                                panic!("obj_loader unexpected error");
+                            };
+
+                            let pos = positions[(v - 1) as usize].clone();
+                            let tex = if vt == 0 {
+                                vec![0.0, 0.0]
+                            } else {
+                                texcoords[(vt - 1) as usize].clone()
+                            };
+                            let norm = if vn == 0 {
+                                vec![0.0, 0.0, 0.0]
+                            } else {
+                                normals[(vn - 1) as usize].clone()
+                            };
+
+                            verts.push([pos, tex, norm].concat());
+                            if i == 0 {
+                                v0 = verts.len() - 1;
+                            }
+                            if i >= 2 {
+                                indices.extend_from_slice(&[
+                                    v0 as u16, 
+                                    (verts.len() - 2) as u16, 
+                                    (verts.len() - 1) as u16
+                                ]);
+                                triangles += 1;
+                            }
+
+                            i += 1;
+                        }
                     } else {
-                        indices.extend_from_slice(&[x, y, z]);
+                        panic!("Invalid face, face contains less than 3 specs");
                     }
+                    faces += 1;
                 },
                 _ => continue,
             }
         }
 
+        println!("{}, {}", faces, triangles);
         let res = verts.into_iter().flatten().collect();
         return (res, indices);
     }
