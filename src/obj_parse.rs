@@ -7,8 +7,7 @@ pub mod obj {
         let mut normals: Vec<Vec<f32>> = Vec::new();
         let mut texcoords: Vec<Vec<f32>> = Vec::new();
 
-        let mut faces = 0;
-        let mut triangles = 0;
+        let mut cunt = 0;
 
         let lines = content.lines();
         for line in lines {
@@ -29,7 +28,6 @@ pub mod obj {
                     let j = iter.next().unwrap().parse::<f32>().unwrap();
                     let k = iter.next().unwrap().parse::<f32>().unwrap();
                     normals.push(vec![i, j, k]);
-                    println!("Adding normal");
                 },
                 "vt" => {
                     let u = iter.next().unwrap().parse::<f32>().unwrap();
@@ -64,6 +62,7 @@ pub mod obj {
                             };
 
                             verts.push([pos, tex, norm].concat());
+                            cunt += 1;
                             if i == 0 {
                                 v0 = verts.len() - 1;
                             }
@@ -73,7 +72,6 @@ pub mod obj {
                                     (verts.len() - 2) as u16, 
                                     (verts.len() - 1) as u16
                                 ]);
-                                triangles += 1;
                             }
 
                             i += 1;
@@ -81,13 +79,12 @@ pub mod obj {
                     } else {
                         panic!("Invalid face, face contains less than 3 specs");
                     }
-                    faces += 1;
                 },
                 _ => continue,
             }
         }
 
-        println!("{}, {}", faces, triangles);
+        println!("{}, {}", cunt, verts.len());
         let res = verts.into_iter().flatten().collect();
         return (res, indices);
     }

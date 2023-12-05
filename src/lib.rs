@@ -1,6 +1,6 @@
 use std::{rc::Rc, cell::RefCell, mem::size_of};
 use wasm_bindgen::prelude::*;
-use web_sys::{WebGl2RenderingContext, WebGlShader, WebGlProgram, HtmlCanvasElement};
+use web_sys::{WebGl2RenderingContext, WebGlShader, WebGlProgram, HtmlCanvasElement, HtmlInputElement};
 extern crate js_sys;
 extern crate nalgebra_glm as glm;
 
@@ -41,6 +41,12 @@ fn context(canvas: HtmlCanvasElement) -> WebGl2RenderingContext {
         .expect("failed dyn_into WebGl2RenderingContext")
 }
 
+fn get_canvas() -> HtmlCanvasElement {
+    let canvas = document().get_element_by_id("canvas").unwrap();
+    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
+    return canvas;
+}
+
 fn get_window_dimmensions() -> (i32, i32) {
     (window().inner_width().unwrap().as_f64().unwrap() as i32,
     window().inner_height().unwrap().as_f64().unwrap() as i32)
@@ -56,9 +62,7 @@ fn resize_callback(context_ref: WebGl2RenderingContext, canvas_ref: HtmlCanvasEl
 #[wasm_bindgen(start)]
 fn start() -> Result<(), JsValue> {
     let document = document();
-    let canvas = document.get_element_by_id("canvas").unwrap();
-    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
-
+    let canvas = get_canvas();
     let context = context(canvas.clone());
 
     let vertex_shader = compile_shader(
@@ -75,6 +79,7 @@ fn start() -> Result<(), JsValue> {
     context.use_program(Some(&program));
 
     let obj_data = read_file("dragon.obj").unwrap();
+    // let obj_data = read_file("hous.obj").unwrap();
     let (verts_vec, indices_vec) = parse(&obj_data);
     let vertices = verts_vec.as_slice();
     let indices = indices_vec.as_slice();
@@ -114,12 +119,13 @@ fn start() -> Result<(), JsValue> {
         .ok_or("Could not create vertex array object")?;
     context.bind_vertex_array(Some(&vao));
 
+    let floatsize: i32 = size_of::<f32>() as i32;
     context.vertex_attrib_pointer_with_i32(
         position_attribute_location as u32,
         3,
         WebGl2RenderingContext::FLOAT,
         false,
-        8 * size_of::<f32>() as i32,
+        8 * floatsize,
         0,
     );
     context.vertex_attrib_pointer_with_i32(
@@ -127,16 +133,16 @@ fn start() -> Result<(), JsValue> {
         2,
         WebGl2RenderingContext::FLOAT,
         false,
-        8 * size_of::<f32>() as i32,
-        3 * size_of::<f32>() as i32,
+        8 * floatsize,
+        3 * floatsize,
     );
     context.vertex_attrib_pointer_with_i32(
         normal_attribute_location as u32,
         3,
         WebGl2RenderingContext::FLOAT,
         false,
-        8 * size_of::<f32>() as i32,
-        5 * size_of::<f32>() as i32,
+        8 * floatsize,
+        5 * floatsize,
     );
     context.enable_vertex_attrib_array(position_attribute_location as u32);
     context.enable_vertex_attrib_array(texcoord_attribute_location as u32);
@@ -157,6 +163,27 @@ fn start() -> Result<(), JsValue> {
     resize_callback(context.clone(), canvas.clone());
     resize_func.forget();
 
+    // let view = RefCell::new(glm::identity::<f32, 4>());
+    // *view.borrow_mut() = glm::translate(&view.borrow(), &glm::vec3(0.0, 0.0, -3.0));
+    // view = glm::translate(&view, &glm::vec3(0.0, 0.0, -1.0 * (1.0 - f32::exp(-1.0 * 1.0 * 3.0))));
+
+    // Window keyboard callback
+    // let keydown_func = Closure::wrap(Box::new({
+    //     // let context_ref = context.clone();
+    //     // let canvas_ref = canvas.clone();
+    //     let mut ref_view = view.clone().borrow_mut();
+    //     move |event: web_sys::KeyboardEvent| {
+    //         match event.code().as_str() {
+    //             "KeyW" => {
+    //                 *ref_view = glm::translate(&ref_view, &glm::vec3(0.0, 0.0, -1000.0));
+    //             },
+    //             _ => log(format!("{}", event.code().as_str()).as_str()),
+    //         }
+    //     }
+    // }) as Box<dyn FnMut(_)>);
+    // document.add_event_listener_with_callback("keydown", keydown_func.as_ref().unchecked_ref())?;
+    // keydown_func.forget();
+
     // This is our render loop
     let render_func = Rc::new(RefCell::new(None));
     let ref_render_func = render_func.clone();
@@ -167,16 +194,21 @@ fn start() -> Result<(), JsValue> {
         move || {
             let time = window().performance().unwrap().now() as f32;
 
+            let toggle1 = document.get_element_by_id("hyper").unwrap();
+            let toggle: web_sys::HtmlInputElement = toggle1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let checked = toggle.checked();
+
             let mut model = glm::identity::<f32, 4>();
-            model = glm::scale(&model, &glm::vec3(0.3, 0.3, 0.3));
+            model = glm::scale(&model, &glm::vec3(0.2, 0.2, 0.2));
             model = glm::translate(&model, &glm::vec3(0.0, -4.0, -2.0));
             model = glm::rotate(&model, 
-                f32::to_radians(time / 10.0 + 90.0), 
+                f32::to_radians(time / 70.0), 
                 &glm::vec3(0.0, 1.0, 0.0)
             );
 
             let mut view = glm::identity::<f32, 4>();
-            view = glm::translate(&view, &glm::vec3(0.0, 0.0, -3.0));
+            view = glm::translate(&view, &glm::vec3(0.0, 0.3 + f32::sin(time / 600.0) * 0.5, -3.0));
+            // view = glm::translate(&view, &glm::vec3(0.0, 0.0, -1.0 * (1.0 - f32::exp(-1.0 * 1.0 * 3.0))));
 
             let (width, height) = get_window_dimmensions();
             let aspect = width as f32 / height as f32;
@@ -189,10 +221,22 @@ fn start() -> Result<(), JsValue> {
             context_ref.uniform_matrix4fv_with_f32_array(Some(&model_location), false, model.as_slice());
             context_ref.uniform_matrix4fv_with_f32_array(Some(&view_location), false, view.as_slice());
             context_ref.uniform_matrix4fv_with_f32_array(Some(&proj_location), false, projection.as_slice());
+           
+            let bool_location = context_ref.get_uniform_location(&program, "toggle").unwrap();
+            context_ref.uniform1i(Some(&bool_location), if checked {1} else {0});
+            let time_location = context_ref.get_uniform_location(&program, "time").unwrap();
+            context_ref.uniform1f(Some(&time_location), time);
 
             draw(&context_ref, indices_len);
-            
-            request_animation_frame(render_func.borrow().as_ref().unwrap());
+           
+            let timeout_func = Closure::wrap(Box::new({
+                let ref_render_func = render_func.clone();
+                move || {
+                    request_animation_frame(ref_render_func.borrow().as_ref().unwrap());
+                }
+            }) as Box<dyn FnMut()>);
+            let _ = window().set_timeout_with_callback_and_timeout_and_arguments_0(timeout_func.as_ref().unchecked_ref(), 83);
+            timeout_func.forget();
         }
     }) as Box<dyn FnMut()>));
     request_animation_frame(ref_render_func.borrow().as_ref().unwrap());
