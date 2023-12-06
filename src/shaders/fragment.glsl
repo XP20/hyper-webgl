@@ -10,6 +10,10 @@ uniform mat4 view;
 uniform mat4 projection;
 uniform float time;
 uniform highp int toggle;
+uniform highp int rgb;
+uniform highp float hue;
+uniform highp float ambient;
+uniform highp float sat;
 
 out vec4 outColor;
 
@@ -31,12 +35,15 @@ vec3 hsv2rgb(vec3 c) {
 
 void main() {
     // outColor = vec4(f_normal, 1.0);
-    float hue = mod((time / 3000.0), 1.0);
-    vec3 color = vec3(1.0, 1.0, 1.0);
-    if (toggle == 1) {
-        color = hsv2rgb(vec3(hue, 1.0, 1.0));
+    float hue2 = mod((time / 3000.0), 1.0);
+    vec3 color = hsv2rgb(vec3(hue2, sat, 1.0));
+    if (rgb == 1) {
+        if (hue != 0.0) {
+            color = hsv2rgb(vec3(hue, sat, 1.0));
+        } else {
+            color = vec3(1.0, 1.0, 1.0);
+        }
     }
-    float ambient = 0.3;
-    float light = ambient + abs(dot((view * vec4(0.0, 0.0, 1.0, 1.0)).xyz, (model * vec4(f_normal, 0.0)).xyz));
+    float light = ambient + abs(dot(normalize((view * vec4(0.0, 0.0, 1.0, 1.0)).xyz), normalize((model * vec4(f_normal, 0.0)).xyz)));
     outColor = vec4(color * light, 1.0);
 }

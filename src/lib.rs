@@ -194,20 +194,64 @@ fn start() -> Result<(), JsValue> {
         move || {
             let time = window().performance().unwrap().now() as f32;
 
+            let rgb1 = document.get_element_by_id("rgb").unwrap();
+            let rgb: web_sys::HtmlInputElement = rgb1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let togrgb = rgb.checked();
+
             let toggle1 = document.get_element_by_id("hyper").unwrap();
             let toggle: web_sys::HtmlInputElement = toggle1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
             let checked = toggle.checked();
+            
+            let strx1 = document.get_element_by_id("strx").unwrap();
+            let strxel: web_sys::HtmlInputElement = strx1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let strx = strxel.value().parse::<i32>().unwrap() as f32 / 10.0;
+
+            let stry1 = document.get_element_by_id("stry").unwrap();
+            let stryel: web_sys::HtmlInputElement = stry1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let stry = stryel.value().parse::<i32>().unwrap() as f32 / 10.0;
+
+            let speedrot1 = document.get_element_by_id("speedrot").unwrap();
+            let speedrotel: web_sys::HtmlInputElement = speedrot1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let speedrot = speedrotel.value().parse::<i32>().unwrap() as f32 / 10.0;
+
+            let speed1 = document.get_element_by_id("speed").unwrap();
+            let speedel: web_sys::HtmlInputElement = speed1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let speed = speedel.value().parse::<i32>().unwrap() as f32 / 10.0;
+
+            let hue1 = document.get_element_by_id("hue").unwrap();
+            let hueel: web_sys::HtmlInputElement = hue1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let hue = hueel.value().parse::<i32>().unwrap();
+
+            let fps1 = document.get_element_by_id("fps").unwrap();
+            let fps: web_sys::HtmlInputElement = fps1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let fpsval = fps.value().parse::<i32>().unwrap();
+            
+            let rotoff1 = document.get_element_by_id("rot").unwrap();
+            let rotoffel: web_sys::HtmlInputElement = rotoff1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let rot = rotoffel.value().parse::<i32>().unwrap();
+            
+            let dist1 = document.get_element_by_id("dist").unwrap();
+            let distel: web_sys::HtmlInputElement = dist1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let dist = distel.value().parse::<i32>().unwrap() as f32 / 10.0;
+            
+            let ambient1 = document.get_element_by_id("ambient").unwrap();
+            let ambientel: web_sys::HtmlInputElement = ambient1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let ambient = ambientel.value().parse::<i32>().unwrap() as f32 / 100.0;
+            
+            let sat1 = document.get_element_by_id("sat").unwrap();
+            let satel: web_sys::HtmlInputElement = sat1.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+            let sat = satel.value().parse::<i32>().unwrap() as f32 / 100.0;
 
             let mut model = glm::identity::<f32, 4>();
-            model = glm::scale(&model, &glm::vec3(0.2, 0.2, 0.2));
+            model = glm::scale(&model, &glm::vec3(0.2 * dist, 0.2 * dist, 0.2 * dist));
             model = glm::translate(&model, &glm::vec3(0.0, -4.0, -2.0));
             model = glm::rotate(&model, 
-                f32::to_radians(time / 70.0), 
+                f32::to_radians(time / 140.0 * speedrot + rot as f32), 
                 &glm::vec3(0.0, 1.0, 0.0)
             );
 
             let mut view = glm::identity::<f32, 4>();
-            view = glm::translate(&view, &glm::vec3(0.0, 0.3 + f32::sin(time / 600.0) * 0.5, -3.0));
+            view = glm::translate(&view, &glm::vec3(0.0 + f32::sin(time / 1200.0 * speed) * strx, 0.3 + f32::sin(time / 1200.0 * speed) * stry, -3.0));
             // view = glm::translate(&view, &glm::vec3(0.0, 0.0, -1.0 * (1.0 - f32::exp(-1.0 * 1.0 * 3.0))));
 
             let (width, height) = get_window_dimmensions();
@@ -224,8 +268,20 @@ fn start() -> Result<(), JsValue> {
            
             let bool_location = context_ref.get_uniform_location(&program, "toggle").unwrap();
             context_ref.uniform1i(Some(&bool_location), if checked {1} else {0});
+            let hue_location = context_ref.get_uniform_location(&program, "hue").unwrap();
+            context_ref.uniform1f(Some(&hue_location), hue as f32 / 360.0);
+
+            let rgb_toggle_location = context_ref.get_uniform_location(&program, "rgb").unwrap();
+            context_ref.uniform1i(Some(&rgb_toggle_location), if togrgb {1} else {0});
+            
             let time_location = context_ref.get_uniform_location(&program, "time").unwrap();
             context_ref.uniform1f(Some(&time_location), time);
+            
+            let ambient_location = context_ref.get_uniform_location(&program, "ambient").unwrap();
+            context_ref.uniform1f(Some(&ambient_location), ambient);
+            
+            let sat_location = context_ref.get_uniform_location(&program, "sat").unwrap();
+            context_ref.uniform1f(Some(&sat_location), sat);
 
             draw(&context_ref, indices_len);
            
@@ -235,7 +291,7 @@ fn start() -> Result<(), JsValue> {
                     request_animation_frame(ref_render_func.borrow().as_ref().unwrap());
                 }
             }) as Box<dyn FnMut()>);
-            let _ = window().set_timeout_with_callback_and_timeout_and_arguments_0(timeout_func.as_ref().unchecked_ref(), 83);
+            let _ = window().set_timeout_with_callback_and_timeout_and_arguments_0(timeout_func.as_ref().unchecked_ref(), 1000 / fpsval);
             timeout_func.forget();
         }
     }) as Box<dyn FnMut()>));
